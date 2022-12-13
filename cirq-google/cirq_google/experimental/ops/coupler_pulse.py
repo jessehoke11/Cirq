@@ -23,15 +23,15 @@ from cirq._compat import proper_repr
 @cirq.value_equality(approximate=True)
 class CouplerPulse(cirq.ops.Gate):
     r"""Tunable pulse for entangling adjacent qubits.
-
+ 
     For experimental usage only.
-
+ 
     This operation sends a trapezoidal pulse to the coupler between two
     adjacent qubits placed in resonance.
-
+ 
     Note that this gate does not have a unitary matrix and must be
     characterized by the user in order to determine its effects.
-
+ 
     ```
                      __________
                     /          \
@@ -41,92 +41,88 @@ class CouplerPulse(cirq.ops.Gate):
                  ->  <-      ->   <-
                 rise_time   rise_time
     ```
-
+ 
     Args:
             hold_time: Length of the 'plateau' part of the coupler trajectory.
             coupling_mhz: Target qubit-qubit coupling reached at the plateau.
             rise_time: Width of the rising (or falling) section of the trapezoidal pulse.
             padding_time: Symmetric padding around the coupler pulse.
+            qubits_detune_MHz: detuning of the qubits.
     """
-
+ 
     def __init__(
         self,
         hold_time: cirq.Duration,
-        coupling_mhz: cirq.TParamVal,
+        coupling_mhz: float,
+        qubits_detune_MHz: float,
         rise_time: Optional[cirq.Duration] = cirq.Duration(nanos=8),
         padding_time: Optional[cirq.Duration] = cirq.Duration(nanos=2.5),
     ):
         """Inits CouplerPulse.
-
+ 
         Args:
             hold_time: Length of the 'plateau' part of the coupler trajectory.
             coupling_mhz: Target qubit-qubit coupling reached at the plateau.
             rise_time: Width of the rising (or falling) action of the trapezoidal pulse.
             padding_time: Symmetric padding around the coupler pulse.
-
+            qubits_detune_MHz: detuning of the qubits.
+ 
+        Raises:
+            ValueError: If any time is negative or if the total pulse is too long.
         """
+        if hold_time < _MIN_DURATION:
+            raise ValueError(f'hold_time must be greater than {_MIN_DURATION}')
+        if padding_time < _MIN_DURATION:
+            raise ValueError(f'padding_time must be greater than {_MIN_DURATION}')
+        if rise_time < _MIN_DURATION:
+            raise ValueError(f'rise_time must be greater than {_MIN_DURATION}')
+ 
         self.hold_time = hold_time
         self.coupling_mhz = coupling_mhz
+        self.qubits_detune_MHz = qubits_detune_MHz
         self.rise_time = rise_time or cirq.Duration(nanos=8)
         self.padding_time = padding_time or cirq.Duration(nanos=2.5)
-
+ 
+        total_time = hold_time + 2 * self.rise_time + 2 * self.padding_time
+        if total_time > _MAX_DURATION:
+            raise ValueError(
+                f'Total time of coupler pulse ({total_time}) '
+                f'cannot be greater than {_MAX_DURATION}'
+            )
+ 
     def num_qubits(self) -> int:
         return 2
-
+ 
     def _unitary_(self) -> np.ndarray:
         return NotImplemented
-
+ 
     def __repr__(self) -> str:
         return (
             'cirq_google.experimental.ops.coupler_pulse.'
-            + f'CouplerPulse(hold_time={proper_repr(self.hold_time)}, '
-            + f'coupling_mhz={proper_repr(self.coupling_mhz)}, '
-            + f'rise_time={proper_repr(self.rise_time)}, '
-            + f'padding_time={proper_repr(self.padding_time)})'
+            + f'CouplerPulse(hold_time={self.hold_time!r}, '
+            + f'coupling_mhz={self.coupling_mhz}, '
+            + f'rise_time={self.rise_time!r}, '
+            + f'padding_time={self.padding_time!r},'
+            + f'detuning={self.qubits_detune_MHz!r})'
         )
-
+ 
     def __str__(self) -> str:
         return (
             f'CouplerPulse(hold_time={self.hold_time}, '
             + f'coupling_mhz={self.coupling_mhz}, '
             + f'rise_time={self.rise_time}, '
-            + f'padding_time={self.padding_time})'
+            + f'padding_time={self.padding_time},'
+            + f'detuning={self.qubits_detune_MHz})'
         )
-
-    def _is_parameterized_(self) -> bool:
-        return (
-            cirq.is_parameterized(self.hold_time)
-            or cirq.is_parameterized(self.coupling_mhz)
-            or cirq.is_parameterized(self.rise_time)
-            or cirq.is_parameterized(self.padding_time)
-        )
-
-    def _parameter_names_(self: Any) -> AbstractSet[str]:
-        return (
-            cirq.parameter_names(self.hold_time)
-            | cirq.parameter_names(self.coupling_mhz)
-            | cirq.parameter_names(self.rise_time)
-            | cirq.parameter_names(self.padding_time)
-        )
-
-    def _resolve_parameters_(
-        self, resolver: cirq.ParamResolverOrSimilarType, recursive: bool
-    ) -> 'CouplerPulse':
-        return CouplerPulse(
-            hold_time=cirq.resolve_parameters(self.hold_time, resolver, recursive=recursive),
-            coupling_mhz=cirq.resolve_parameters(self.coupling_mhz, resolver, recursive=recursive),
-            rise_time=cirq.resolve_parameters(self.rise_time, resolver, recursive=recursive),
-            padding_time=cirq.resolve_parameters(self.padding_time, resolver, recursive=recursive),
-        )
-
+ 
     def _value_equality_values_(self) -> Any:
         return self.hold_time, self.coupling_mhz, self.rise_time, self.padding_time
-
+ 
     def _circuit_diagram_info_(self, args: cirq.CircuitDiagramInfoArgs) -> Tuple[str, ...]:
         s = f'/‾‾({self.hold_time}@{self.coupling_mhz}MHz)‾‾\\'
         return (s, s)
-
+ 
     def _json_dict_(self):
         return cirq.obj_to_dict_helper(
-            self, ['hold_time', 'coupling_mhz', 'rise_time', 'padding_time']
+            self, ['hold_time', 'coupling_mhz', 'rise_time', 'padding_time', 'qubits_detune_MHz']
         )
